@@ -1,6 +1,15 @@
 {
-  "name": "abcd",
+  "name": "Gumlet DRM integration with ReactJS",
   "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gumlet/drm-react-js"
+  },
+  "author": "Gumlet Pte. Ltd.",
+  "bugs": {
+    "url": "https://www.gumlet.com/contact/"
+  },
+  "homepage": "https://docs.gumlet.com/docs/drm-with-reactjs",
   "private": true,
   "dependencies": {
     "@testing-library/jest-dom": "^5.16.4",
