@@ -7,10 +7,16 @@ function App() {
   const controllerRef = useRef(null);
   const [assetLoaded, setAssetLoaded] = useState(false);
 
-  const fairplayCertificateURI = "https://fairplay.gumlet.com/certificate/61f8d851266c91643c899b40";
-  const fairplayLicenseURI = "https://fairplay.gumlet.com/licence/61f8d851266c91643c899b40  ";
-  const HLSManifestURI = "https://video.gumlet.io/61f8d8cf63ae5601a4a7891b/62d952ddf9ecad4aedee96f0/main.m3u8";
-  const widevineLicenseURI = "https://example.com/licence-url";
+
+  // ADAPT: `fairplayLicenseAndCertificateURI` to your server URI to fetch the fairplay
+  // licence and certificate from
+  const fairplayLicenseAndCertificateURI = "https://example.com/fairplay-licence-and-certificate-url";
+
+  // ADAPT: `widevineLicenseURI` to your server URI to fetch the widevine licence
+  const widevineLicenseURI = "https://example.com/widevine-licence-url";
+  
+  // ADAPT: `videoURI` to your video URL
+  const videoURI = "https://video.gumlet.com/example-hls-manifest";
   
   const onError = (event) => {
     console.error('Error code', event.detail.code, 'object', event.detail) // eslint-disable-line no-console
@@ -22,56 +28,59 @@ function App() {
   }
 
   async function loadAssetWithFairplay() {
-      const req = await fetch(fairplayCertificateURI);
-      const cert = await req.arrayBuffer();
-
-      let video = controllerRef.current;
+    const response = await fetch(fairplayLicenseAndCertificateURI);
+    const json = await response.json();
     
-      let player = new shaka.Player(video);
+    const req = await fetch(json.certificate);
+    const cert = await req.arrayBuffer();
 
-      player.addEventListener('error', onError)
+    let video = controllerRef.current;
+  
+    let player = new shaka.Player(video);
 
-      player.configure({
-        drm: {
-            servers: {
-              // YOUR LICENSE SERVER GOES HERE:
-              'com.apple.fps.1_0': fairplayLicenseURI,
-            },
-            advanced: {
-                'com.apple.fps.1_0':{
-                  serverCertificate: new Uint8Array(cert)
-                }
-            }
-        }
+    player.addEventListener('error', onError)
+
+    player.configure({
+      drm: {
+          servers: {
+            // YOUR LICENSE SERVER GOES HERE:
+            'com.apple.fps.1_0': json.license,
+          },
+          advanced: {
+              'com.apple.fps.1_0':{
+                serverCertificate: new Uint8Array(cert)
+              }
+          }
+      }
+    });
+
+    player.getNetworkingEngine().registerRequestFilter((type, request) => {
+      if (type != shaka.net.NetworkingEngine.RequestType.LICENSE) {
+          return;
+      }
+      
+      let spc_string = btoa(String.fromCharCode.apply(null, new Uint8Array(request.body)));
+      
+      request.headers['Content-Type'] = 'application/json';
+      request.body = JSON.stringify({
+          "spc" : spc_string
       });
+    });
 
-      player.getNetworkingEngine().registerRequestFilter((type, request) => {
+    player.getNetworkingEngine().registerResponseFilter((type, response) => {
         if (type != shaka.net.NetworkingEngine.RequestType.LICENSE) {
             return;
         }
-        const originalPayload = new Uint8Array(request.body);
-        let spc_string = btoa(String.fromCharCode.apply(null, new Uint8Array(request.body)));
-        
-        request.headers['Content-Type'] = 'application/json';
-        request.body = JSON.stringify({
-            "spc" : spc_string
-        });
-      });
 
-      player.getNetworkingEngine().registerResponseFilter((type, response) => {
-          if (type != shaka.net.NetworkingEngine.RequestType.LICENSE) {
-              return;
-          }
+        let responseText = shaka.util.StringUtils.fromUTF8(response.data);
+        const parsedResponse = JSON.parse(responseText);
+        response.data = shaka.util.Uint8ArrayUtils.fromBase64(parsedResponse.ckc).buffer;
+    });
 
-          let responseText = shaka.util.StringUtils.fromUTF8(response.data);
-          const parsedResponse = JSON.parse(responseText);
-          response.data = shaka.util.Uint8ArrayUtils.fromBase64(parsedResponse.ckc).buffer;
-      });
-
-      player.load(HLSManifestURI).then(function() {
-        setAssetLoaded(true);
-        console.log('The video has now been loaded!');
-      }).catch(onPlaybackError);
+    player.load(videoURI).then(function() {
+      setAssetLoaded(true);
+      console.log('The video has now been loaded!');
+    }).catch(onPlaybackError);
   }
 
   async function loadAssetWithWidevine() {
@@ -98,7 +107,7 @@ function App() {
       }
     });
 
-    player.load(HLSManifestURI).then(function() {
+    player.load(videoURI).then(function() {
       setAssetLoaded(true);
       console.log('The video has now been loaded!');
     }).catch(onPlaybackError); 
@@ -114,7 +123,7 @@ function App() {
 
   return (
     <div className="App">
-      <h1>Gumlet Video DRM TEST</h1>
+      <h1>Gumlet Video DRM</h1>
       <video ref={controllerRef} preload="none" autoPlay={false} width="640" height="264" controls muted></video>
     </div>
   );
